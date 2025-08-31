@@ -23,3 +23,10 @@ class Warrior():
 
     def info(self):
         print(f"Имя воина - {self.name}\nСила - {self.power}\nВыносливость - {self.endurance}\nЦвет волос - {self.hair_color}")
+
+war1 = Warrior("Олег", 50, 60, "Черный")
+war2 = Warrior("Егор", 80, 60, "Рыжий")
+
+war1.info()
+war1.sleep()
+war1.info()
