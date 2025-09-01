@@ -28,12 +28,12 @@ def complete(description):
 
 
 class Task():
-    def init(self, description, deadline, status):
+    def __init__(self, description, deadline, status):
         self.description = description
         self.deadline = deadline
         self.status = status
 
-    def str(self):
+    def __str__(self):
         return f'{self.description} - {self.deadline}'
 
 
