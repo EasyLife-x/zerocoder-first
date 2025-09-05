@@ -1,0 +1,23 @@
+{
+  "zooTitle": "Зоопарк",
+  "animals": [
+    {
+      "type": "Reptile",
+      "name": "Гадюка",
+      "age": "4 мес",
+      "voice": "Шшшш"
+    }
+  ],
+  "workers": [
+    {
+      "type": "ZooKeeper",
+      "name": "Олег",
+      "age": "30"
+    },
+    {
+      "type": "Veterinarian",
+      "name": "Анна",
+      "age": "25"
+    }
+  ]
+}
