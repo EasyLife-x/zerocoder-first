@@ -6,7 +6,6 @@ import sys
 pygame.init()
 
 # Константы
-GRID_SIZE = 30
 GRID_WIDTH = 10
 GRID_HEIGHT = 20
 SIDEBAR_WIDTH = 200
@@ -110,7 +109,7 @@ class TetrisGame:
         self.play_area_x = 0
         self.play_area_y = 0
         self.sidebar_x = 0
-        self.grid_size = GRID_SIZE
+        self.grid_size = 30
 
     def reset_game(self):
         """Сброс игры к начальному состоянию"""
@@ -159,8 +158,11 @@ class TetrisGame:
         # Обновление счета
         if lines_to_clear:
             self.lines_cleared += len(lines_to_clear)
+            # Начисление очков: 1 линия - 100, 2 линии - 300, 3 линии - 500, 4 линии - 800
             self.score += [100, 300, 500, 800][min(len(lines_to_clear) - 1, 3)] * self.level
+            # Увеличение уровня каждые 10 очищенных линий
             self.level = self.lines_cleared // 10 + 1
+            # Увеличение скорости падения с каждым уровнем
             self.fall_speed = max(0.05, 0.5 - (self.level - 1) * 0.05)
 
     def move(self, dx, dy):
@@ -198,19 +200,18 @@ class TetrisGame:
             self.game_state = "game_over"
 
     def calculate_dimensions(self):
-        """Пересчет размеров элементов при изменении размера окна"""
-        # Вычисляем коэффициент масштабирования
-        self.scale_factor = min(self.screen_width / 1920, self.screen_height / 1080)
-        self.grid_size = int(GRID_SIZE * self.scale_factor)
+        """Пересчет размеров элементов для заполнения всего экрана по высоте"""
+        # Вычисляем размер ячейки, чтобы игровое поле заполнило всю высоту экрана
+        self.grid_size = self.screen_height // GRID_HEIGHT
 
         # Размеры игрового поля
         self.play_area_width = GRID_WIDTH * self.grid_size
         self.play_area_height = GRID_HEIGHT * self.grid_size
 
-        # Позиции элементов
-        self.play_area_x = (self.screen_width - SIDEBAR_WIDTH * self.scale_factor - self.play_area_width) // 2
-        self.play_area_y = (self.screen_height - self.play_area_height) // 2
-        self.sidebar_x = self.play_area_x + self.play_area_width + int(20 * self.scale_factor)
+        # Позиции элементов (центрируем по горизонтали)
+        self.play_area_x = (self.screen_width - SIDEBAR_WIDTH - self.play_area_width) // 2
+        self.play_area_y = 0  # Начинаем с верха экрана
+        self.sidebar_x = self.play_area_x + self.play_area_width
 
     def draw_grid(self):
         """Отрисовка игрового поля"""
@@ -236,11 +237,11 @@ class TetrisGame:
                                        self.play_area_y + y * self.grid_size,
                                        self.grid_size, self.grid_size)
                     pygame.draw.rect(self.screen, color, rect)
-                    pygame.draw.rect(self.screen, shadow, rect, int(2 * self.scale_factor))
+                    pygame.draw.rect(self.screen, shadow, rect, max(1, int(2 * self.scale_factor)))
 
     def draw_current_piece(self):
         """Отрисовка текущей фигуры"""
-        if self.game_state == "playing":
+        if self.game_state == "playing" or self.game_state == "paused":
             for x, y in self.current_piece.get_positions():
                 if y >= 0:
                     color, shadow = self.current_piece.color
@@ -248,68 +249,69 @@ class TetrisGame:
                                        self.play_area_y + y * self.grid_size,
                                        self.grid_size, self.grid_size)
                     pygame.draw.rect(self.screen, color, rect)
-                    pygame.draw.rect(self.screen, shadow, rect, int(2 * self.scale_factor))
+                    pygame.draw.rect(self.screen, shadow, rect, max(1, int(2 * self.scale_factor)))
 
     def draw_next_piece(self):
         """Отрисовка следующей фигуры в сайдбаре"""
         # Отрисовка фона для следующей фигуры
+        next_piece_height = int(self.screen_height * 0.2)
         pygame.draw.rect(self.screen, DARK_GRAY,
-                         (self.sidebar_x, self.play_area_y,
-                          int(SIDEBAR_WIDTH * self.scale_factor - int(20 * self.scale_factor)),
-                          int(150 * self.scale_factor)))
+                         (self.sidebar_x + 10, 20,
+                          SIDEBAR_WIDTH - 20, next_piece_height))
         pygame.draw.rect(self.screen, GRAY,
-                         (self.sidebar_x, self.play_area_y,
-                          int(SIDEBAR_WIDTH * self.scale_factor - int(20 * self.scale_factor)),
-                          int(150 * self.scale_factor)),
-                         int(2 * self.scale_factor))
+                         (self.sidebar_x + 10, 20,
+                          SIDEBAR_WIDTH - 20, next_piece_height), 2)
 
         # Заголовок
         next_text = self.font.render("Следующая:", True, WHITE)
-        self.screen.blit(next_text, (self.sidebar_x + int(10 * self.scale_factor),
-                                     self.play_area_y + int(10 * self.scale_factor)))
+        self.screen.blit(next_text, (self.sidebar_x + 20, 40))
 
         # Отрисовка следующей фигуры
         shape = self.next_piece.shape
         color, shadow = self.next_piece.color
+
+        # Центрируем фигуру в области
+        piece_width = len(shape[0]) * self.grid_size
+        piece_height = len(shape) * self.grid_size
+        start_x = self.sidebar_x + 20 + (SIDEBAR_WIDTH - 40 - piece_width) // 2
+        start_y = 80 + (next_piece_height - 100 - piece_height) // 2
+
         for y, row in enumerate(shape):
             for x, cell in enumerate(row):
                 if cell:
-                    rect = pygame.Rect(self.sidebar_x + int(50 * self.scale_factor) + x * self.grid_size,
-                                       self.play_area_y + int(50 * self.scale_factor) + y * self.grid_size,
+                    rect = pygame.Rect(start_x + x * self.grid_size,
+                                       start_y + y * self.grid_size,
                                        self.grid_size, self.grid_size)
                     pygame.draw.rect(self.screen, color, rect)
-                    pygame.draw.rect(self.screen, shadow, rect, int(2 * self.scale_factor))
+                    pygame.draw.rect(self.screen, shadow, rect, max(1, int(2 * self.scale_factor)))
 
     def draw_sidebar(self):
         """Отрисовка сайдбара с информацией"""
-        # Отрисовка сайдбара
+        # Отрисовка сайдбара (занимает оставшееся пространство по высоте)
+        sidebar_top = int(self.screen_height * 0.25)
+        sidebar_height = self.screen_height - sidebar_top - 20
+
         pygame.draw.rect(self.screen, DARK_GRAY,
-                         (self.sidebar_x, self.play_area_y + int(170 * self.scale_factor),
-                          int(SIDEBAR_WIDTH * self.scale_factor - int(20 * self.scale_factor)),
-                          int(300 * self.scale_factor)))
+                         (self.sidebar_x + 10, sidebar_top,
+                          SIDEBAR_WIDTH - 20, sidebar_height))
         pygame.draw.rect(self.screen, GRAY,
-                         (self.sidebar_x, self.play_area_y + int(170 * self.scale_factor),
-                          int(SIDEBAR_WIDTH * self.scale_factor - int(20 * self.scale_factor)),
-                          int(300 * self.scale_factor)),
-                         int(2 * self.scale_factor))
+                         (self.sidebar_x + 10, sidebar_top,
+                          SIDEBAR_WIDTH - 20, sidebar_height), 2)
 
         # Счет
         score_text = self.font.render(f"Счет: {self.score}", True, WHITE)
-        self.screen.blit(score_text, (self.sidebar_x + int(10 * self.scale_factor),
-                                      self.play_area_y + int(190 * self.scale_factor)))
+        self.screen.blit(score_text, (self.sidebar_x + 20, sidebar_top + 20))
 
         # Уровень
         level_text = self.font.render(f"Уровень: {self.level}", True, WHITE)
-        self.screen.blit(level_text, (self.sidebar_x + int(10 * self.scale_factor),
-                                      self.play_area_y + int(240 * self.scale_factor)))
+        self.screen.blit(level_text, (self.sidebar_x + 20, sidebar_top + 70))
 
         # Линии
         lines_text = self.font.render(f"Линии: {self.lines_cleared}", True, WHITE)
-        self.screen.blit(lines_text, (self.sidebar_x + int(10 * self.scale_factor),
-                                      self.play_area_y + int(290 * self.scale_factor)))
+        self.screen.blit(lines_text, (self.sidebar_x + 20, sidebar_top + 120))
 
         # Управление
-        controls_y = self.play_area_y + int(350 * self.scale_factor)
+        controls_y = sidebar_top + 180
         controls = [
             "Управление:",
             "A - Влево",
@@ -322,8 +324,7 @@ class TetrisGame:
 
         for i, text in enumerate(controls):
             ctrl_text = self.small_font.render(text, True, WHITE)
-            self.screen.blit(ctrl_text, (self.sidebar_x + int(10 * self.scale_factor),
-                                         controls_y + i * int(30 * self.scale_factor)))
+            self.screen.blit(ctrl_text, (self.sidebar_x + 20, controls_y + i * 35))
 
     def draw_menu(self):
         """Отрисовка главного меню"""
@@ -339,27 +340,24 @@ class TetrisGame:
         self.screen.blit(title, title_rect)
 
         # Кнопки
-        button_width = int(300 * self.scale_factor)
-        button_height = int(60 * self.scale_factor)
+        button_width = 300
+        button_height = 60
         button_y_start = self.screen_height // 2
 
         # Кнопка "Играть"
         play_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
                                   button_y_start, button_width, button_height)
-        pygame.draw.rect(self.screen, GREEN, play_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, play_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+        pygame.draw.rect(self.screen, GREEN, play_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, play_button, 3, border_radius=10)
         play_text = self.font.render("ИГРАТЬ", True, BLACK)
         play_text_rect = play_text.get_rect(center=play_button.center)
         self.screen.blit(play_text, play_text_rect)
 
         # Кнопка "Закрыть"
         quit_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
-                                  button_y_start + int(100 * self.scale_factor),
-                                  button_width, button_height)
-        pygame.draw.rect(self.screen, RED, quit_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, quit_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+                                  button_y_start + 100, button_width, button_height)
+        pygame.draw.rect(self.screen, RED, quit_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, quit_button, 3, border_radius=10)
         quit_text = self.font.render("ЗАКРЫТЬ", True, WHITE)
         quit_text_rect = quit_text.get_rect(center=quit_button.center)
         self.screen.blit(quit_text, quit_text_rect)
@@ -380,27 +378,24 @@ class TetrisGame:
         self.screen.blit(pause_text, pause_rect)
 
         # Кнопки
-        button_width = int(300 * self.scale_factor)
-        button_height = int(60 * self.scale_factor)
+        button_width = 300
+        button_height = 60
         button_y_start = self.screen_height // 2
 
         # Кнопка "Продолжить"
         resume_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
                                     button_y_start, button_width, button_height)
-        pygame.draw.rect(self.screen, GREEN, resume_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, resume_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+        pygame.draw.rect(self.screen, GREEN, resume_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, resume_button, 3, border_radius=10)
         resume_text = self.font.render("ПРОДОЛЖИТЬ", True, BLACK)
         resume_text_rect = resume_text.get_rect(center=resume_button.center)
         self.screen.blit(resume_text, resume_text_rect)
 
         # Кнопка "Выйти в меню"
         menu_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
-                                  button_y_start + int(100 * self.scale_factor),
-                                  button_width, button_height)
-        pygame.draw.rect(self.screen, BLUE, menu_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, menu_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+                                  button_y_start + 100, button_width, button_height)
+        pygame.draw.rect(self.screen, BLUE, menu_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, menu_button, 3, border_radius=10)
         menu_text = self.font.render("В МЕНЮ", True, WHITE)
         menu_text_rect = menu_text.get_rect(center=menu_button.center)
         self.screen.blit(menu_text, menu_text_rect)
@@ -426,27 +421,24 @@ class TetrisGame:
         self.screen.blit(score_text, score_rect)
 
         # Кнопки
-        button_width = int(300 * self.scale_factor)
-        button_height = int(60 * self.scale_factor)
-        button_y_start = self.screen_height // 2 + int(100 * self.scale_factor)
+        button_width = 300
+        button_height = 60
+        button_y_start = self.screen_height // 2 + 100
 
         # Кнопка "Играть снова"
         restart_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
                                      button_y_start, button_width, button_height)
-        pygame.draw.rect(self.screen, GREEN, restart_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, restart_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+        pygame.draw.rect(self.screen, GREEN, restart_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, restart_button, 3, border_radius=10)
         restart_text = self.font.render("ИГРАТЬ СНОВА", True, BLACK)
         restart_text_rect = restart_text.get_rect(center=restart_button.center)
         self.screen.blit(restart_text, restart_text_rect)
 
         # Кнопка "В меню"
         menu_button = pygame.Rect(self.screen_width // 2 - button_width // 2,
-                                  button_y_start + int(100 * self.scale_factor),
-                                  button_width, button_height)
-        pygame.draw.rect(self.screen, BLUE, menu_button, border_radius=int(10 * self.scale_factor))
-        pygame.draw.rect(self.screen, WHITE, menu_button, int(3 * self.scale_factor),
-                         border_radius=int(10 * self.scale_factor))
+                                  button_y_start + 100, button_width, button_height)
+        pygame.draw.rect(self.screen, BLUE, menu_button, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, menu_button, 3, border_radius=10)
         menu_text = self.font.render("В МЕНЮ", True, WHITE)
         menu_text_rect = menu_text.get_rect(center=menu_button.center)
         self.screen.blit(menu_text, menu_text_rect)
@@ -479,9 +471,9 @@ class TetrisGame:
                 self.screen_width, self.screen_height = event.size
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
                 self.calculate_dimensions()
-                self.font = pygame.font.SysFont(None, int(self.screen_height * 0.033))
-                self.small_font = pygame.font.SysFont(None, int(self.screen_height * 0.026))
-                self.large_font = pygame.font.SysFont(None, int(self.screen_height * 0.067))
+                self.font = pygame.font.SysFont(None, max(12, int(self.screen_height * 0.033)))
+                self.small_font = pygame.font.SysFont(None, max(10, int(self.screen_height * 0.026)))
+                self.large_font = pygame.font.SysFont(None, max(24, int(self.screen_height * 0.067)))
 
     def handle_game_events(self):
         """Обработка игровых событий"""
@@ -492,8 +484,8 @@ class TetrisGame:
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    # При нажатии ESC возвращаемся в главное меню, а не закрываем игру
-                    self.game_state = "menu"
+                    # При нажатии ESC переходим в меню паузы
+                    self.game_state = "paused"
 
                 if self.game_state == "playing":
                     if event.key == pygame.K_a:
@@ -512,9 +504,9 @@ class TetrisGame:
                 self.screen_width, self.screen_height = event.size
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
                 self.calculate_dimensions()
-                self.font = pygame.font.SysFont(None, int(self.screen_height * 0.033))
-                self.small_font = pygame.font.SysFont(None, int(self.screen_height * 0.026))
-                self.large_font = pygame.font.SysFont(None, int(self.screen_height * 0.067))
+                self.font = pygame.font.SysFont(None, max(12, int(self.screen_height * 0.033)))
+                self.small_font = pygame.font.SysFont(None, max(10, int(self.screen_height * 0.026)))
+                self.large_font = pygame.font.SysFont(None, max(24, int(self.screen_height * 0.067)))
 
     def handle_pause_events(self, resume_button, menu_button):
         """Обработка событий в меню паузы"""
@@ -540,9 +532,9 @@ class TetrisGame:
                 self.screen_width, self.screen_height = event.size
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
                 self.calculate_dimensions()
-                self.font = pygame.font.SysFont(None, int(self.screen_height * 0.033))
-                self.small_font = pygame.font.SysFont(None, int(self.screen_height * 0.026))
-                self.large_font = pygame.font.SysFont(None, int(self.screen_height * 0.067))
+                self.font = pygame.font.SysFont(None, max(12, int(self.screen_height * 0.033)))
+                self.small_font = pygame.font.SysFont(None, max(10, int(self.screen_height * 0.026)))
+                self.large_font = pygame.font.SysFont(None, max(24, int(self.screen_height * 0.067)))
 
     def handle_game_over_events(self, restart_button, menu_button):
         """Обработка событий на экране окончания игры"""
@@ -568,9 +560,9 @@ class TetrisGame:
                 self.screen_width, self.screen_height = event.size
                 self.screen = pygame.display.set_mode((self.screen_width, self.screen_height), pygame.RESIZABLE)
                 self.calculate_dimensions()
-                self.font = pygame.font.SysFont(None, int(self.screen_height * 0.033))
-                self.small_font = pygame.font.SysFont(None, int(self.screen_height * 0.026))
-                self.large_font = pygame.font.SysFont(None, int(self.screen_height * 0.067))
+                self.font = pygame.font.SysFont(None, max(12, int(self.screen_height * 0.033)))
+                self.small_font = pygame.font.SysFont(None, max(10, int(self.screen_height * 0.026)))
+                self.large_font = pygame.font.SysFont(None, max(24, int(self.screen_height * 0.067)))
 
     def update(self):
         """Обновление игровой логики"""
